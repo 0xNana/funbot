@@ -1,0 +1,59 @@
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+from solana.rpc.async_api import AsyncClient
+from solana.publickey import PublicKey
+import asyncio
+
+# Your bot API token
+TELEGRAM_BOT_TOKEN = '7802873374:AAHh3Cz3Rm_R2Lla350QvBvBpxbnpUo3y0M'
+
+# Solana wallet address to track
+WALLET_ADDRESS = 'TERM87YPiM5mVqHS2tz1zuXv6dwM6YjeSSRVW3xiW8j'
+
+# Solana network RPC endpoint
+SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+
+# Your Telegram chat ID
+CHAT_ID = 1254579765
+
+
+async def check_wallet_transactions(wallet_address: str):
+    """Check Solana wallet transactions."""
+    async with AsyncClient(SOLANA_RPC_URL) as client:
+        wallet = PublicKey(wallet_address)
+        # Fetch wallet transactions
+        transactions = await client.get_confirmed_signature_for_address2(wallet, limit=10)
+        return transactions['result']
+
+
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text('Bot is running and tracking wallet transactions.')
+
+
+async def track_wallet(context: CallbackContext):
+    """Track wallet interactions and send them via Telegram."""
+    transactions = await check_wallet_transactions(WALLET_ADDRESS)
+    for transaction in transactions:
+        # Sending the transaction details to Telegram
+        context.bot.send_message(chat_id=context.job.context, 
+                                 text=f"New Transaction: {transaction['signature']}\nBlock: {transaction['slot']}")
+
+
+def main():
+    # Set up the bot updater and dispatcher
+    updater = Updater(TELEGRAM_BOT_TOKEN)
+    dispatcher = updater.dispatcher
+
+    # Add /start command handler
+    dispatcher.add_handler(CommandHandler("start", start))
+
+    # Add a job to check wallet transactions every minute
+    updater.job_queue.run_repeating(track_wallet, interval=60, first=10, context=CHAT_ID)
+
+    # Start the bot
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    # Start the bot loop
+    main()
